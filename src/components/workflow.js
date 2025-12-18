@@ -9,11 +9,26 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useCallback, useEffect, useState } from "react";
 import { NodePanel } from "./nodepanel.js";
+import { DEFAULT_NODES, DEFAULT_EDGES } from "../constants/defaultNodes";
+import { WORKFLOW_API_BASE, DEFAULT_WORKFLOW_ID } from "../constants/api";
+import { NODE_DROP_TYPE } from "../constants/reactflow";
 
 export const Workflow = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const NODE_X_POSITION = 10;
+  const NODE_Y_SPACING = 200;
+  const fetchWorkflow = async (workflowId) => {
+    try {
+      const res = await fetch(`${WORKFLOW_API_BASE}/${workflowId}`);
+      const data = await res.json();
+      return data.definition;
+    } catch (err) {
+      console.error("Failed to fetch workflow:", err);
+      return { nodes: {}, edges: [] };
+    }
+  };
 
   const onConnect = useCallback((connection) => {
     setEdges((prev) =>
@@ -31,18 +46,17 @@ export const Workflow = () => {
   const uniquePanelNodes = Array.from(
     new Map(nodes.map((node) => [node.data.label, node])).values()
   );
-
   const transformNodes = (apiNodes) => {
-    return apiNodes.map((node, index) => ({
-      id: node[1].nodeId,
-      type: node[1].nodeType,
+    return apiNodes.map(([_, node], index) => ({
+      id: node.nodeId,
+      type: "default",
       position: {
-        x: 10,
-        y: 200 * index,
+        x: NODE_X_POSITION,
+        y: NODE_Y_SPACING * index,
       },
       data: {
-        label: node[1].nodeName,
-        params: node[1].nodeParams,
+        label: node.nodeName,
+        params: node.nodeParams,
       },
     }));
   };
@@ -64,43 +78,26 @@ export const Workflow = () => {
   };
 
   useEffect(() => {
-    fetch("https://rubik.valyx.com/workflows/twflow_b210db0a85")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Object.keys(data.definition.nodes).length === 0) {
-          setNodes([
-            {
-              id: "node-1",
-              type: "default",
-              position: { x: 50, y: 100 },
-              data: { label: "Node 1" },
-            },
-            {
-              id: "node-2",
-              type: "default",
-              position: { x: 50, y: 200 },
-              data: { label: "Node 2" },
-            },
-            {
-              id: "node-3",
-              type: "default",
-              position: { x: 50, y: 300 },
-              data: { label: "Node 3" },
-            },
-          ]);
-          setEdges([]);
-        } else {
-          transformAndSetWorkflow(data.definition);
-        }
-      });
+    const loadWorkflow = async () => {
+      const definition = await fetchWorkflow(DEFAULT_WORKFLOW_ID);
+
+      if (!definition || Object.keys(definition.nodes).length === 0) {
+        setNodes(DEFAULT_NODES);
+        setEdges(DEFAULT_EDGES);
+      } else {
+        transformAndSetWorkflow(definition);
+      }
+    };
+
+    loadWorkflow();
   }, []);
 
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
 
-      const rawData = event.dataTransfer.getData("application/reactflow");
-      if (!rawData) return; // nothing to parse
+      const rawData = event.dataTransfer.getData(NODE_DROP_TYPE);
+      if (!rawData) return;
 
       let data;
       try {
@@ -113,7 +110,7 @@ export const Workflow = () => {
       if (!reactFlowInstance) return;
 
       const bounds = event.target.getBoundingClientRect();
-      const position = reactFlowInstance.project({
+      const position = reactFlowInstance.screenToFlowPosition({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       });
@@ -134,9 +131,9 @@ export const Workflow = () => {
     <div
       className="box"
       style={{
-        display: "flex", // horizontal layout
-        height: "100vh", // full viewport height
-        width: "100vw", // optional, full width
+        display: "flex",
+        height: "100vh",
+        width: "100vw",
       }}
     >
       <NodePanel nodes={uniquePanelNodes} />

@@ -1,0 +1,1 @@
+export const NODE_DROP_TYPE = "application/reactflow"
